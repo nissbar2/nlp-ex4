@@ -9,6 +9,7 @@ import operator
 import data_loader
 import pickle
 import tqdm
+import matplotlib.pyplot as plt
 
 # ------------------------------------------- Constants ----------------------------------------
 
@@ -88,7 +89,7 @@ def load_word2vec():
     return wv_from_bin
 
 
-def create_or_load_slim_w2v(words_list, cache_w2v=False):
+def create_or_load_slim_w2v(words_list, cache_w2v=True):
     """
     returns word2vec dict only for words which appear in the dataset.
     :param words_list: list of words to use for the w2v dict
@@ -115,7 +116,12 @@ def get_w2v_average(sent, word_to_vec, embedding_dim):
     :param embedding_dim: the dimension of the word embedding vectors
     :return The average embedding vector as numpy ndarray.
     """
-    return
+    text = sent.text
+    vectors = []
+    for word in text:
+        if word in word_to_vec:
+            vectors.append(word_to_vec[word])
+    return np.mean(vectors, axis=0)
 
 
 def get_one_hot(size, ind):
@@ -125,7 +131,9 @@ def get_one_hot(size, ind):
     :param ind: the entry index to turn to 1
     :return: numpy ndarray which represents the one-hot vector
     """
-    return
+    onehot = np.zeros(size, dtype=np.float32)
+    onehot[ind] = 1
+    return onehot
 
 
 def average_one_hots(sent, word_to_ind):
@@ -136,7 +144,11 @@ def average_one_hots(sent, word_to_ind):
     :param word_to_ind: a mapping between words to indices
     :return:
     """
-    return
+    text = sent.text
+    vectors = []
+    for word in text:
+        vectors.append(get_one_hot(len(word_to_ind), word_to_ind[word]))
+    return np.mean(vectors, axis=0)
 
 
 def get_word_to_ind(words_list):
@@ -146,7 +158,10 @@ def get_word_to_ind(words_list):
     :param words_list: a list of words
     :return: the dictionary mapping words to the index
     """
-    return
+    words_list = sorted(words_list)
+    return {
+        word: words_list.index(word) for word in words_list
+    }
 
 
 def sentence_to_embedding(sent, word_to_vec, seq_len, embedding_dim=300):
@@ -287,13 +302,22 @@ class LogLinear(nn.Module):
     general class for the log-linear models for sentiment analysis.
     """
     def __init__(self, embedding_dim):
-        return
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.fully_connected = nn.Linear(self.embedding_dim, 1)
 
     def forward(self, x):
-        return
+        return self.fully_connected(x)
 
-    def predict(self, x):
-        return
+    def predict(self, x, x_is_logits=False):
+        logits = x
+        if x_is_logits is False:
+            logits = self.forward(x)
+        ten = torch.zeros_like(logits)
+        logits_sig = nn.functional.sigmoid(logits)
+        ten[logits_sig > 0.5] = 1
+        ten[logits_sig <= 0.5] = 0
+        return ten
 
 
 # ------------------------- training functions -------------
@@ -307,8 +331,7 @@ def binary_accuracy(preds, y):
     :param y: a vector of true labels
     :return: scalar value - (<number of accurate predictions> / <number of examples>)
     """
-
-    return
+    return torch.sum(preds == y) / preds.shape[0]
 
 
 def train_epoch(model, data_iterator, optimizer, criterion):
@@ -320,8 +343,24 @@ def train_epoch(model, data_iterator, optimizer, criterion):
     :param optimizer: the optimizer object for the training process.
     :param criterion: the criterion object for the training process.
     """
+    model.train()
+    epoch_loss = 0.0
+    accuracy = 0.0
+    for X, y in data_iterator:
+        optimizer.zero_grad()
+        logits = model(X)
+        loss = criterion(logits.squeeze(dim=1), y)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
 
-    return
+        with torch.no_grad():
+            pred = model.predict(logits, x_is_logits=True)
+            accuracy += binary_accuracy(pred, y)
+
+    mean_accuracy = accuracy / len(data_iterator)
+    mean_epoch_loss = epoch_loss / len(data_iterator)
+    return  mean_epoch_loss, mean_accuracy
 
 
 def evaluate(model, data_iterator, criterion):
@@ -332,20 +371,42 @@ def evaluate(model, data_iterator, criterion):
     :param criterion: the loss criterion used for evaluation
     :return: tuple of (average loss over all examples, average accuracy over all examples)
     """
-    return
+    model.eval()
+    epoch_loss = 0.0
+    accuracy = 0.0
+    with torch.no_grad():
+        for X, y in data_iterator:
+            logits = model(X)
+            loss = criterion(logits.squeeze(dim=1), y)
+            epoch_loss += loss.item()
+            pred = model.predict(logits, x_is_logits=True)
+            accuracy += binary_accuracy(pred, y)
+    mean_epoch_loss = epoch_loss / len(data_iterator)
+    mean_epoch_accuracy = accuracy / len(data_iterator)
+    return mean_epoch_loss, mean_epoch_accuracy
 
 
 def get_predictions_for_data(model, data_iter):
     """
-
-    This function should iterate over all batches of examples from data_iter and return all of the models
+    This function should iterate over all batches of examples from data_iter and return all of the model's
     predictions as a numpy ndarray or torch tensor (or list if you prefer). the prediction should be in the
     same order of the examples returned by data_iter.
     :param model: one of the models you implemented in the exercise
     :param data_iter: torch iterator as given by the DataManager
     :return:
     """
-    return
+    model.eval()
+    preds = []
+    all_y = []
+    with torch.no_grad():
+        for X, y in data_iter:
+            batch_pred = model.predict(X)
+            preds.append(batch_pred)
+            all_y.append(y)
+
+    pred = torch.cat(preds, dim=0)
+    y = torch.cat(all_y, dim=0)
+    return pred, y
 
 
 def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
@@ -358,13 +419,56 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
     :param lr: learning rate to be used for optimization
     :param weight_decay: parameter for l2 regularization
     """
-    return
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    train_loss = np.zeros(n_epochs)
+    train_accuracy = np.zeros(n_epochs)
+    val_loss = np.zeros(n_epochs)
+    val_accuracy = np.zeros(n_epochs)
+    for epoch in range(n_epochs):
+        train_loss[epoch], train_accuracy[epoch] = train_epoch(model, data_manager.torch_iterators[TRAIN], optimizer,
+                                                                 criterion)
+        val_loss[epoch], val_accuracy[epoch] = evaluate(model, data_manager.torch_iterators[VAL], criterion)
+
+    # # map data splits to torch datasets and iterators
+    # self.torch_datasets = {k: OnlineDataset(sentences, self.sent_func, self.sent_func_kwargs) for
+    #                        k, sentences in self.sentences.items()}
+    # self.torch_iterators = {k: DataLoader(dataset, batch_size=batch_size, shuffle=k == TRAIN)
+    #                         for k, dataset in self.torch_datasets.items()}
+    return train_loss, train_accuracy, val_loss, val_accuracy
 
 
 def train_log_linear_with_one_hot():
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
+    EPOCHS = 2
+    data_manager = DataManager(batch_size=64)
+    model = LogLinear(data_manager.get_input_shape()[0])
+    train_loss, train_accuracy, val_loss, val_accuracy = \
+        train_model(model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001)
+
+    x = [str(a + 1) for a in range(EPOCHS)]
+    plt.plot(x, train_loss, label="train loss", c="blue")
+    plt.plot(x, val_loss, label="validation loss", c="orange")
+    plt.legend()
+    plt.title("Loss as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Loss")
+    plt.show()
+
+    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
+    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
+    plt.legend()
+    plt.title("Accuracy as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Accuracy")
+    plt.show()
+
+    criterion = nn.BCEWithLogitsLoss()
+    mean_test_loss, mean_test_accuracy = evaluate(model, data_manager.torch_iterators[TEST], criterion)
+    print("Test loss ", mean_test_loss)
+    print("Test accuracy ", mean_test_accuracy.item())
     return
 
 
@@ -373,6 +477,33 @@ def train_log_linear_with_w2v():
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.
     """
+    EPOCHS = 2
+    data_manager = DataManager(data_type=W2V_AVERAGE, batch_size=64)
+    model = LogLinear(data_manager.get_input_shape()[0])
+    train_loss, train_accuracy, val_loss, val_accuracy = \
+        train_model(model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001)
+
+    x = [str(a + 1) for a in range(EPOCHS)]
+    plt.plot(x, train_loss, label="train loss", c="blue")
+    plt.plot(x, val_loss, label="validation loss", c="orange")
+    plt.legend()
+    plt.title("Loss as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Loss")
+    plt.show()
+
+    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
+    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
+    plt.legend()
+    plt.title("Accuracy as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Accuracy")
+    plt.show()
+
+    criterion = nn.BCEWithLogitsLoss()
+    mean_test_loss, mean_test_accuracy = evaluate(model, data_manager.torch_iterators[TEST], criterion)
+    print("Test loss ", mean_test_loss)
+    print("Test accuracy ", mean_test_accuracy.item())
     return
 
 
@@ -384,6 +515,6 @@ def train_lstm_with_w2v():
 
 
 if __name__ == '__main__':
-    train_log_linear_with_one_hot()
-    # train_log_linear_with_w2v()
+    # train_log_linear_with_one_hot()
+    train_log_linear_with_w2v()
     # train_lstm_with_w2v()
