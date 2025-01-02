@@ -21,6 +21,7 @@
   <component name="ChangeListManager">
     <list default="true" id="b72358ce-28de-4501-9bfd-f401546c59a7" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_loader.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/exercise_blanks.py" beforeDir="false" afterPath="$PROJECT_DIR$/exercise_blanks.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -77,6 +78,13 @@
       <option name="presentableId" value="Default" />
       <updated>1735738489401</updated>
     </task>
+    <task id="LOCAL‎00001" summary="WHY NOT">
+      <created>1735753283603</created>
+      <option name="number" value="LOCAL‎00001" />
+      <option name="presentableId" value="LOCAL‎00001" />
+      <updated>1735753283603</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -89,48 +97,57 @@
         </entry>
       </map>
     </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="WHY NOT" />
+    <option name="LAST_COMMIT_MESSAGE" value="WHY NOT" />
   </component>
   <component name="WindowStateProjectService">
-    <state x="557" y="138" key="#xdebugger.evaluate" timestamp="1735750501526">
+    <state x="106" y="207" key="#xdebugger.evaluate" timestamp="1735831700447">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state x="557" y="138" key="#xdebugger.evaluate/0.32.1728.1085@0.32.1728.1085" timestamp="1735750501526" />
-    <state width="1707" height="413" key="GridCell.Tab.0.bottom" timestamp="1735753180675">
+    <state x="106" y="207" key="#xdebugger.evaluate/0.32.1728.1085@0.32.1728.1085" timestamp="1735831700447" />
+    <state width="1707" height="413" key="GridCell.Tab.0.bottom" timestamp="1735833899591">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="413" key="GridCell.Tab.0.bottom/0.32.1728.1085@0.32.1728.1085" timestamp="1735753180675" />
-    <state width="1707" height="413" key="GridCell.Tab.0.center" timestamp="1735753180675">
+    <state width="1707" height="413" key="GridCell.Tab.0.bottom/0.32.1728.1085@0.32.1728.1085" timestamp="1735833899591" />
+    <state width="1707" height="413" key="GridCell.Tab.0.center" timestamp="1735833899591">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="413" key="GridCell.Tab.0.center/0.32.1728.1085@0.32.1728.1085" timestamp="1735753180675" />
-    <state width="1707" height="413" key="GridCell.Tab.0.left" timestamp="1735753180674">
+    <state width="1707" height="413" key="GridCell.Tab.0.center/0.32.1728.1085@0.32.1728.1085" timestamp="1735833899591" />
+    <state width="1707" height="413" key="GridCell.Tab.0.left" timestamp="1735833899590">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="413" key="GridCell.Tab.0.left/0.32.1728.1085@0.32.1728.1085" timestamp="1735753180674" />
-    <state width="1707" height="413" key="GridCell.Tab.0.right" timestamp="1735753180675">
+    <state width="1707" height="413" key="GridCell.Tab.0.left/0.32.1728.1085@0.32.1728.1085" timestamp="1735833899590" />
+    <state width="1707" height="413" key="GridCell.Tab.0.right" timestamp="1735833899591">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="413" key="GridCell.Tab.0.right/0.32.1728.1085@0.32.1728.1085" timestamp="1735753180675" />
-    <state width="1707" height="376" key="GridCell.Tab.1.bottom" timestamp="1735750676957">
+    <state width="1707" height="413" key="GridCell.Tab.0.right/0.32.1728.1085@0.32.1728.1085" timestamp="1735833899591" />
+    <state width="1707" height="376" key="GridCell.Tab.1.bottom" timestamp="1735832032631">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="376" key="GridCell.Tab.1.bottom/0.32.1728.1085@0.32.1728.1085" timestamp="1735750676957" />
-    <state width="1707" height="376" key="GridCell.Tab.1.center" timestamp="1735750676957">
+    <state width="1707" height="376" key="GridCell.Tab.1.bottom/0.32.1728.1085@0.32.1728.1085" timestamp="1735832032631" />
+    <state width="1707" height="376" key="GridCell.Tab.1.center" timestamp="1735832032631">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="376" key="GridCell.Tab.1.center/0.32.1728.1085@0.32.1728.1085" timestamp="1735750676957" />
-    <state width="1707" height="376" key="GridCell.Tab.1.left" timestamp="1735750676956">
+    <state width="1707" height="376" key="GridCell.Tab.1.center/0.32.1728.1085@0.32.1728.1085" timestamp="1735832032631" />
+    <state width="1707" height="376" key="GridCell.Tab.1.left" timestamp="1735832032631">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="376" key="GridCell.Tab.1.left/0.32.1728.1085@0.32.1728.1085" timestamp="1735750676956" />
-    <state width="1707" height="376" key="GridCell.Tab.1.right" timestamp="1735750676957">
+    <state width="1707" height="376" key="GridCell.Tab.1.left/0.32.1728.1085@0.32.1728.1085" timestamp="1735832032631" />
+    <state width="1707" height="376" key="GridCell.Tab.1.right" timestamp="1735832032631">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
-    <state width="1707" height="376" key="GridCell.Tab.1.right/0.32.1728.1085@0.32.1728.1085" timestamp="1735750676957" />
+    <state width="1707" height="376" key="GridCell.Tab.1.right/0.32.1728.1085@0.32.1728.1085" timestamp="1735832032631" />
     <state x="638" y="283" key="RollbackChangesDialog" timestamp="1735738811531">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
     <state x="638" y="283" key="RollbackChangesDialog/0.32.1728.1085@0.32.1728.1085" timestamp="1735738811531" />
+    <state x="464" y="301" key="Vcs.Push.Dialog.v2" timestamp="1735753286350">
+      <screen x="0" y="32" width="1728" height="1085" />
+    </state>
+    <state x="464" y="301" key="Vcs.Push.Dialog.v2/0.32.1728.1085@0.32.1728.1085" timestamp="1735753286350" />
     <state x="568" y="332" width="592" height="490" key="find.popup" timestamp="1735738546382">
       <screen x="0" y="32" width="1728" height="1085" />
     </state>
@@ -141,13 +158,18 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/exercise_blanks.py</url>
-          <line>350</line>
-          <option name="timeStamp" value="1" />
+          <line>463</line>
+          <option name="timeStamp" value="2" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/exercise_blanks.py</url>
-          <line>451</line>
-          <option name="timeStamp" value="2" />
+          <line>125</line>
+          <option name="timeStamp" value="9" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/exercise_blanks.py</url>
+          <line>534</line>
+          <option name="timeStamp" value="10" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

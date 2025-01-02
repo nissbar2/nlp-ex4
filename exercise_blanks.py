@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import os
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
 import operator
 import data_loader
 import pickle
@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 SEQ_LEN = 52
 W2V_EMBEDDING_DIM = 300
+HIDDEN_DIM = 100
 
 ONEHOT_AVERAGE = "onehot_average"
 W2V_AVERAGE = "w2v_average"
@@ -107,7 +108,7 @@ def create_or_load_slim_w2v(words_list, cache_w2v=True):
     return w2v_emb_dict
 
 
-def get_w2v_average(sent, word_to_vec, embedding_dim):
+def get_w2v_average(sent, word_to_vec, embedding_dim=W2V_EMBEDDING_DIM):
     """
     This method gets a sentence and returns the average word embedding of the words consisting
     the sentence.
@@ -121,7 +122,11 @@ def get_w2v_average(sent, word_to_vec, embedding_dim):
     for word in text:
         if word in word_to_vec:
             vectors.append(word_to_vec[word])
-    return np.mean(vectors, axis=0)
+    if len(vectors) == 0:
+        # raise ValueError(f"shit: {text}")
+        return np.zeros(embedding_dim, dtype=np.float32)
+    result = np.mean(vectors, axis=0).astype(np.float32)
+    return result
 
 
 def get_one_hot(size, ind):
@@ -174,7 +179,12 @@ def sentence_to_embedding(sent, word_to_vec, seq_len, embedding_dim=300):
     :param embedding_dim: the dimension of the w2v embedding
     :return: numpy ndarray of shape (seq_len, embedding_dim) with the representation of the sentence
     """
-    return
+    vectors = np.zeros((seq_len, embedding_dim), dtype=np.float32)
+    tokens = sent.text
+    for i, token in enumerate(tokens[:seq_len]):
+        if token in word_to_vec:
+            vectors[i] = word_to_vec[token]
+    return vectors
 
 
 class OnlineDataset(Dataset):
@@ -279,22 +289,29 @@ class DataManager():
         return self.torch_datasets[TRAIN][0][0].shape
 
 
-
-
 # ------------------------------------ Models ----------------------------------------------------
+
 
 class LSTM(nn.Module):
     """
     An LSTM for sentiment analysis with architecture as described in the exercise description.
     """
     def __init__(self, embedding_dim, hidden_dim, n_layers, dropout):
-        return
+        super().__init__()
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
+        self.fc = nn.Linear(2*hidden_dim, 1)
 
     def forward(self, text):
-        return
+        output, (hn, cn) = self.lstm(text)
+        return self.fc(hn.flatten())
 
     def predict(self, text):
-        return
+        logits = self.forward(text)
+        logits_sig = nn.functional.sigmoid(logits)
+        ten = torch.zeros_like(logits)
+        ten[logits_sig > 0.5] = 1
+        ten[logits_sig <= 0.5] = 0
+        return ten
 
 
 class LogLinear(nn.Module):
@@ -467,8 +484,21 @@ def train_log_linear_with_one_hot():
 
     criterion = nn.BCEWithLogitsLoss()
     mean_test_loss, mean_test_accuracy = evaluate(model, data_manager.torch_iterators[TEST], criterion)
-    print("Test loss ", mean_test_loss)
-    print("Test accuracy ", mean_test_accuracy.item())
+    print("Test Log Linear loss ", mean_test_loss)
+    print("Test Log Linear accuracy ", mean_test_accuracy.item())
+    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Log Linear Negated Polarity Accuracy ", success_rate.item())
+
+    indices = data_loader.get_rare_words_examples(data_manager.sentences[TEST], data_manager.sentiment_dataset)
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Log Linear Rare Words Accuracy ", success_rate.item())
     return
 
 
@@ -478,7 +508,7 @@ def train_log_linear_with_w2v():
     representation.
     """
     EPOCHS = 2
-    data_manager = DataManager(data_type=W2V_AVERAGE, batch_size=64)
+    data_manager = DataManager(data_type=W2V_AVERAGE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM)
     model = LogLinear(data_manager.get_input_shape()[0])
     train_loss, train_accuracy, val_loss, val_accuracy = \
         train_model(model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001)
@@ -504,6 +534,19 @@ def train_log_linear_with_w2v():
     mean_test_loss, mean_test_accuracy = evaluate(model, data_manager.torch_iterators[TEST], criterion)
     print("Test loss ", mean_test_loss)
     print("Test accuracy ", mean_test_accuracy.item())
+    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Negated Polarity Accuracy ", success_rate.item())
+
+    indices = data_loader.get_rare_words_examples(data_manager.sentences[TEST], data_manager.sentiment_dataset)
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Rare Words Accuracy ", success_rate.item())
     return
 
 
@@ -511,10 +554,51 @@ def train_lstm_with_w2v():
     """
     Here comes your code for training and evaluation of the LSTM model.
     """
+    EPOCHS = 4
+    data_manager = DataManager(data_type=W2V_SEQUENCE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM)
+    model = LSTM(W2V_EMBEDDING_DIM, HIDDEN_DIM, 1, 0.5)
+    train_loss, train_accuracy, val_loss, val_accuracy = \
+        train_model(model, data_manager, n_epochs=EPOCHS, lr=0.001, weight_decay=0.0001)
+
+    x = [str(a + 1) for a in range(EPOCHS)]
+    plt.plot(x, train_loss, label="train loss", c="blue")
+    plt.plot(x, val_loss, label="validation loss", c="orange")
+    plt.legend()
+    plt.title("Loss as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Loss")
+    plt.show()
+
+    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
+    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
+    plt.legend()
+    plt.title("Accuracy as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Accuracy")
+    plt.show()
+
+    criterion = nn.BCEWithLogitsLoss()
+    mean_test_loss, mean_test_accuracy = evaluate(model, data_manager.torch_iterators[TEST], criterion)
+    print("Test loss ", mean_test_loss)
+    print("Test accuracy ", mean_test_accuracy.item())
+    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Negated Polarity Accuracy ", success_rate.item())
+
+    indices = data_loader.get_rare_words_examples(data_manager.sentences[TEST], data_manager.sentiment_dataset)
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=64)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print("Test Rare Words Accuracy ", success_rate.item())
+    print("hello world")
     return
 
 
 if __name__ == '__main__':
     # train_log_linear_with_one_hot()
-    train_log_linear_with_w2v()
-    # train_lstm_with_w2v()
+    # train_log_linear_with_w2v()
+    train_lstm_with_w2v()

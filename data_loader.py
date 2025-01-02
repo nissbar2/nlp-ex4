@@ -273,7 +273,6 @@ class SentimentTreeBank(object):
         return self._word_counts
 
 
-
 def get_negated_polarity_examples(sentences_list, num_examples=None, choose_random=False):
     """
     Returns the indices of the sentences in sentences_list which have subphrase in the second level with
