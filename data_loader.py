@@ -1,16 +1,15 @@
 import os
 import random
 
-
-POSITIVE_SENTIMENT = 1.
-NEGATIVE_SENTIMENT = 0.
-NEUTRAL_SENTIMENT = -1.
+POSITIVE_SENTIMENT = 1.0
+NEGATIVE_SENTIMENT = 0.0
+NEUTRAL_SENTIMENT = -1.0
 
 
 SENTIMENT_NAMES = {
     POSITIVE_SENTIMENT: "Positive",
     NEUTRAL_SENTIMENT: "Neutral",
-    NEGATIVE_SENTIMENT: "Negative"
+    NEGATIVE_SENTIMENT: "Negative",
 }
 SENTS_PATH = "SOStr.txt"
 TREES_PATH = "STree.txt"
@@ -26,8 +25,16 @@ def get_sentiment_class_from_val(sentiment_val: float):
     else:
         return NEUTRAL_SENTIMENT
 
+
 class SentimentTreeNode(object):
-    def __init__(self, text: list, sentiment_val: float, min_token_idx: int, children=[], parent=None):
+    def __init__(
+        self,
+        text: list,
+        sentiment_val: float,
+        min_token_idx: int,
+        children=[],
+        parent=None,
+    ):
         self.text = text
         self.sentiment_val = sentiment_val
         self.min_token_idx = min_token_idx
@@ -44,6 +51,7 @@ class Sentence(object):
     sent.sentiment_class is the coding of the annotated sentiment polarity of the sentence.
     sent.sentiment_val is the exact annotated sentiment value in the range [0,1]
     """
+
     def __init__(self, sentence_root: SentimentTreeNode):
         self.root = sentence_root
         self.text = sentence_root.text
@@ -63,7 +71,13 @@ class Sentence(object):
         return self._get_leaves_recursively(self.root)
 
     def __repr__(self):
-        return " ".join(self.text) + " | " + SENTIMENT_NAMES[self.sentiment_class] + " | " + str(self.sentiment_val)
+        return (
+            " ".join(self.text)
+            + " | "
+            + SENTIMENT_NAMES[self.sentiment_class]
+            + " | "
+            + str(self.sentiment_val)
+        )
 
 
 class SentimentTreeBank(object):
@@ -71,7 +85,13 @@ class SentimentTreeBank(object):
     The main object that represents the stanfordSentimentTreeBank dataset. Can be used to access the
     examples and some other utilities.
     """
-    def __init__(self, path="stanfordSentimentTreebank", split_ratios=(0.8,0.1,0.1), split_words=True):
+
+    def __init__(
+        self,
+        path="stanfordSentimentTreebank",
+        split_ratios=(0.8, 0.1, 0.1),
+        split_words=True,
+    ):
         """
 
         :param path: relative or absolute path to the datset directory
@@ -91,10 +111,18 @@ class SentimentTreeBank(object):
                     splitted_final = []
                     for s in splitted:
                         splitted_final.extend(s.split("\\/"))
-                    if len(splitted_final) > 1 and all([len(s) > 0 for s in splitted_final]):
-                        leaves = [SentimentTreeNode([s], node.sentiment_val,
-                                                    min_token_idx=node.min_token_idx, parent=node) for
-                                  s in splitted_final]
+                    if len(splitted_final) > 1 and all(
+                        [len(s) > 0 for s in splitted_final]
+                    ):
+                        leaves = [
+                            SentimentTreeNode(
+                                [s],
+                                node.sentiment_val,
+                                min_token_idx=node.min_token_idx,
+                                parent=node,
+                            )
+                            for s in splitted_final
+                        ]
                         node.text = splitted_final
                         node.children = leaves
                         cur_parent = node.parent
@@ -105,23 +133,25 @@ class SentimentTreeBank(object):
                             cur_parent = cur_parent.parent
                 sent.text = sent.root.text
 
-
         assert len(split_ratios) == 3
         assert sum(split_ratios) == 1
         self.split_ratios = split_ratios
 
-
-
     def _read_sentences(self):
         sentences = []
-        with open(os.path.join(self._base_path, SENTS_PATH), "r", encoding="utf-8") as f:
+        with open(
+            os.path.join(self._base_path, SENTS_PATH), "r", encoding="utf-8"
+        ) as f:
             lines = f.read().split("\n")
             for i, line in enumerate(lines):
                 if len(line.strip()) == 0:
                     continue
                 line_content = line.strip()
                 tokens = line_content.split("|")
-                tokens = [t.lower().replace("-lrb-","(").replace("-rrb-", ")") for t in tokens]
+                tokens = [
+                    t.lower().replace("-lrb-", "(").replace("-rrb-", ")")
+                    for t in tokens
+                ]
                 sentences.append(tokens)
         return sentences
 
@@ -133,13 +163,16 @@ class SentimentTreeBank(object):
             lines = f.read().split("\n")[:-1]
             for line in lines:
                 phrase, phrase_id = line.strip().split("|")
-                phrases_dictionary[phrase.lower().replace("-lrb-","(").replace("-rrb-", ")")] = int(phrase_id)
+                phrases_dictionary[
+                    phrase.lower().replace("-lrb-", "(").replace("-rrb-", ")")
+                ] = int(phrase_id)
 
         # extract labels
-        with open(os.path.join(self._base_path, LABELS_path), "r",  encoding="utf-8") as f:
+        with open(
+            os.path.join(self._base_path, LABELS_path), "r", encoding="utf-8"
+        ) as f:
             lines = [l.strip().split("|") for l in f.read().split("\n")[1:-1]]
             labels_dict = {int(l[0]): float(l[1]) for l in lines}
-
 
         def get_val_from_phrase(phrase_tokens_list):
             try:
@@ -159,21 +192,27 @@ class SentimentTreeBank(object):
         labeled_sentences = []
         for sent, sent_pointers in zip(sentences, tree_pointers):
             try:
-
                 children_dict = {i: [] for i in range(len(sent_pointers))}
                 for i, p in enumerate(sent_pointers):
                     if i < len(sent):
                         node_text = [sent[i]]
-                        node = SentimentTreeNode(text=node_text, sentiment_val=get_val_from_phrase(node_text),
-                                                 min_token_idx=i)
+                        node = SentimentTreeNode(
+                            text=node_text,
+                            sentiment_val=get_val_from_phrase(node_text),
+                            min_token_idx=i,
+                        )
                     else:
                         children = children_dict[i]
-                        children = sorted(children, key= lambda n: n.min_token_idx)
+                        children = sorted(children, key=lambda n: n.min_token_idx)
                         node_text = []
                         for child in children:
                             node_text.extend(child.text)
-                        node = SentimentTreeNode(text=node_text, sentiment_val=get_val_from_phrase(node_text),
-                                                 children=children, min_token_idx=children[0].min_token_idx)
+                        node = SentimentTreeNode(
+                            text=node_text,
+                            sentiment_val=get_val_from_phrase(node_text),
+                            children=children,
+                            min_token_idx=children[0].min_token_idx,
+                        )
                         for child in children:
                             child.parent = node
                     if p > 0:
@@ -187,7 +226,9 @@ class SentimentTreeBank(object):
                 raise e
                 print("couldn't parse sentence!")
                 print(sent)
-        random.Random(1).shuffle(labeled_sentences) # shuffle but with the same shuffle each time
+        random.Random(1).shuffle(
+            labeled_sentences
+        )  # shuffle but with the same shuffle each time
         return labeled_sentences
 
     def get_train_set(self):
@@ -195,7 +236,9 @@ class SentimentTreeBank(object):
         :return: list of Sentence instances for the train part of the dataset
         """
         if not hasattr(self, "_train_set"):
-            self._train_set = self.sentences[:int(self.split_ratios[0] * len(self.sentences))]
+            self._train_set = self.sentences[
+                : int(self.split_ratios[0] * len(self.sentences))
+            ]
         return self._train_set
 
     def _extract_all_phrases(self, root):
@@ -233,7 +276,9 @@ class SentimentTreeBank(object):
         :return: list of Sentence instances for the validation part of the dataset
         """
         if not hasattr(self, "_validation_set"):
-            self._validation_set = self.sentences[int(sum(self.split_ratios[:2]) * len(self.sentences)):]
+            self._validation_set = self.sentences[
+                int(sum(self.split_ratios[:2]) * len(self.sentences)) :
+            ]
         return self._validation_set
 
     def get_train_word_counts(self):
@@ -273,7 +318,9 @@ class SentimentTreeBank(object):
         return self._word_counts
 
 
-def get_negated_polarity_examples(sentences_list, num_examples=None, choose_random=False):
+def get_negated_polarity_examples(
+    sentences_list, num_examples=None, choose_random=False
+):
     """
     Returns the indices of the sentences in sentences_list which have subphrase in the second level with
     sentiment polarity different than the whole sentence polarity.
@@ -284,7 +331,7 @@ def get_negated_polarity_examples(sentences_list, num_examples=None, choose_rand
     """
 
     if num_examples is None:
-        num_examples = len(sentences_list) # take all possible sentences
+        num_examples = len(sentences_list)  # take all possible sentences
 
     def is_polarized(sent: Sentence):
         if sent.sentiment_class == NEUTRAL_SENTIMENT:
@@ -295,9 +342,10 @@ def get_negated_polarity_examples(sentences_list, num_examples=None, choose_rand
                 if child.sentiment_class == 1 - root_polarity:
                     return True
             return False
+
     indexed_senteces = list(enumerate(sentences_list))
     negated_sentences = list(filter(lambda s: is_polarized(s[1]), indexed_senteces))
-    negated_sentences_indices = [i for i,s in negated_sentences]
+    negated_sentences_indices = [i for i, s in negated_sentences]
     if len(negated_sentences) <= num_examples:
         return negated_sentences_indices
     else:
@@ -311,8 +359,9 @@ def get_sentiment_words(sent: Sentence):
     return [node for node in sent.get_leaves() if node.sentiment_class == sent_polarity]
 
 
-def get_rare_words_examples(sentences_list, dataset: SentimentTreeBank,
-                            num_sentences=50):
+def get_rare_words_examples(
+    sentences_list, dataset: SentimentTreeBank, num_sentences=50
+):
     """
     Computes for each sentence in sentences the maximal train frequency of sentiment word, where sentiment
     word is a word which is labeled with either positive or negative sentiment value, and returns the
@@ -330,17 +379,20 @@ def get_rare_words_examples(sentences_list, dataset: SentimentTreeBank,
             return word_counts[word_text]
         else:
             return 0
+
     indexed_sentences = list(enumerate(sentences_list))
-    indexed_sentences = list(filter(lambda s: len(get_sentiment_words(s[1])) > 0, indexed_sentences))
-    indexed_sentences = sorted(indexed_sentences, key= lambda s: max([get_count(node) for node in
-                                                                      get_sentiment_words(s[1])]))
-    indices = [i for i,s in indexed_sentences]
+    indexed_sentences = list(
+        filter(lambda s: len(get_sentiment_words(s[1])) > 0, indexed_sentences)
+    )
+    indexed_sentences = sorted(
+        indexed_sentences,
+        key=lambda s: max([get_count(node) for node in get_sentiment_words(s[1])]),
+    )
+    indices = [i for i, s in indexed_sentences]
     return indices[:num_sentences]
 
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     # examples for reading the sentiment dataset
     dataset = SentimentTreeBank()
     # get train set
