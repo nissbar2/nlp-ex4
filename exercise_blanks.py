@@ -332,15 +332,22 @@ class LSTM(nn.Module):
 
     def forward(self, text):
         output, (hn, cn) = self.lstm(text)
-        return self.fc(hn.flatten())
+        concatinated_hidden = torch.cat([hn[0], hn[1]], dim=1)
+        return self.fc(concatinated_hidden)
 
-    def predict(self, text):
-        logits = self.forward(text)
+    def predict(self, text, input_is_logits=False):
+        logits = text
+        if input_is_logits is False:
+            logits = self.forward(text)
         logits_sig = nn.functional.sigmoid(logits)
         ten = torch.zeros_like(logits)
         ten[logits_sig > 0.5] = 1
         ten[logits_sig <= 0.5] = 0
         return ten
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
 
 class LogLinear(nn.Module):
@@ -356,15 +363,19 @@ class LogLinear(nn.Module):
     def forward(self, x):
         return self.fully_connected(x)
 
-    def predict(self, x, x_is_logits=False):
+    def predict(self, x, input_is_logits=False):
         logits = x
-        if x_is_logits is False:
+        if input_is_logits is False:
             logits = self.forward(x)
         ten = torch.zeros_like(logits)
         logits_sig = nn.functional.sigmoid(logits)
         ten[logits_sig > 0.5] = 1
         ten[logits_sig <= 0.5] = 0
         return ten
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
 
 # ------------------------- training functions -------------
@@ -394,6 +405,8 @@ def train_epoch(model, data_iterator, optimizer, criterion):
     epoch_loss = 0.0
     accuracy = 0.0
     for X, y in data_iterator:
+        X = X.to(model.device)
+        y = y.to(model.device)
         optimizer.zero_grad()
         logits = model(X)
         loss = criterion(logits.squeeze(dim=1), y)
@@ -402,7 +415,7 @@ def train_epoch(model, data_iterator, optimizer, criterion):
         epoch_loss += loss.item()
 
         with torch.no_grad():
-            pred = model.predict(logits, x_is_logits=True)
+            pred = model.predict(logits, input_is_logits=True)
             accuracy += binary_accuracy(pred, y)
 
     mean_accuracy = accuracy / len(data_iterator)
@@ -423,10 +436,12 @@ def evaluate(model, data_iterator, criterion):
     accuracy = 0.0
     with torch.no_grad():
         for X, y in data_iterator:
+            X = X.to(model.device)
+            y = y.to(model.device)
             logits = model(X)
             loss = criterion(logits.squeeze(dim=1), y)
             epoch_loss += loss.item()
-            pred = model.predict(logits, x_is_logits=True)
+            pred = model.predict(logits, input_is_logits=True)
             accuracy += binary_accuracy(pred, y)
     mean_epoch_loss = epoch_loss / len(data_iterator)
     mean_epoch_accuracy = accuracy / len(data_iterator)
@@ -447,6 +462,8 @@ def get_predictions_for_data(model, data_iter):
     all_y = []
     with torch.no_grad():
         for X, y in data_iter:
+            X = X.to(model.device)
+            y = y.to(model.device)
             batch_pred = model.predict(X)
             preds.append(batch_pred)
             all_y.append(y)
@@ -480,21 +497,19 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.0):
             model, data_manager.torch_iterators[VAL], criterion
         )
 
-    # # map data splits to torch datasets and iterators
-    # self.torch_datasets = {k: OnlineDataset(sentences, self.sent_func, self.sent_func_kwargs) for
-    #                        k, sentences in self.sentences.items()}
-    # self.torch_iterators = {k: DataLoader(dataset, batch_size=batch_size, shuffle=k == TRAIN)
-    #                         for k, dataset in self.torch_datasets.items()}
     return train_loss, train_accuracy, val_loss, val_accuracy
 
 
-def train_log_linear_with_one_hot():
+def train_log_linear_with_one_hot(device):
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
-    EPOCHS = 2
+    EPOCHS = 20
     data_manager = DataManager(batch_size=64)
-    model = LogLinear(data_manager.get_input_shape()[0])
+    model = LogLinear(data_manager.get_input_shape()[0]).to(device)
+
+    print("Log Linear Model (using one-hot encoding):")
+
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
         model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001
     )
@@ -537,19 +552,21 @@ def train_log_linear_with_one_hot():
     predictions, y = get_predictions_for_data(model, dataloader)
     success_rate = binary_accuracy(predictions, y)
     print("Test Log Linear Rare Words Accuracy ", success_rate.item())
-    return
 
 
-def train_log_linear_with_w2v():
+def train_log_linear_with_w2v(device):
     """
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.
     """
-    EPOCHS = 2
+    EPOCHS = 20
     data_manager = DataManager(
         data_type=W2V_AVERAGE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM
     )
-    model = LogLinear(data_manager.get_input_shape()[0])
+    model = LogLinear(data_manager.get_input_shape()[0]).to(device)
+
+    print("Log Linear Model (using averaged word2vec embedding):")
+
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
         model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001
     )
@@ -592,10 +609,9 @@ def train_log_linear_with_w2v():
     predictions, y = get_predictions_for_data(model, dataloader)
     success_rate = binary_accuracy(predictions, y)
     print("Test Rare Words Accuracy ", success_rate.item())
-    return
 
 
-def train_lstm_with_w2v():
+def train_lstm_with_w2v(device):
     """
     Here comes your code for training and evaluation of the LSTM model.
     """
@@ -603,7 +619,10 @@ def train_lstm_with_w2v():
     data_manager = DataManager(
         data_type=W2V_SEQUENCE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM
     )
-    model = LSTM(W2V_EMBEDDING_DIM, HIDDEN_DIM, 1, 0.5)
+    model = LSTM(W2V_EMBEDDING_DIM, HIDDEN_DIM, 1, 0.5).to(device)
+
+    print("LSTM Model (using sequence of 52 word2vec embedding):")
+
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
         model, data_manager, n_epochs=EPOCHS, lr=0.001, weight_decay=0.0001
     )
@@ -646,11 +665,10 @@ def train_lstm_with_w2v():
     predictions, y = get_predictions_for_data(model, dataloader)
     success_rate = binary_accuracy(predictions, y)
     print("Test Rare Words Accuracy ", success_rate.item())
-    print("hello world")
-    return
 
 
 if __name__ == "__main__":
-    # train_log_linear_with_one_hot()
-    # train_log_linear_with_w2v()
-    train_lstm_with_w2v()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_log_linear_with_one_hot(device)
+    train_log_linear_with_w2v(device)
+    train_lstm_with_w2v(device)
