@@ -55,35 +55,35 @@ def load_pickle(path):
         return pickle.load(f)
 
 
-def save_model(model, path, epoch, optimizer):
-    """
-    Utility function for saving checkpoint of a model, so training or evaluation can be executed later on.
-    :param model: torch module representing the model
-    :param optimizer: torch optimizer used for training the module
-    :param path: path to save the checkpoint into
-    """
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        },
-        path,
-    )
+# def save_model(model, path, epoch, optimizer):
+#     """
+#     Utility function for saving checkpoint of a model, so training or evaluation can be executed later on.
+#     :param model: torch module representing the model
+#     :param optimizer: torch optimizer used for training the module
+#     :param path: path to save the checkpoint into
+#     """
+#     torch.save(
+#         {
+#             "epoch": epoch,
+#             "model_state_dict": model.state_dict(),
+#             "optimizer_state_dict": optimizer.state_dict(),
+#         },
+#         path,
+#     )
 
 
-def load(model, path, optimizer):
-    """
-    Loads the state (weights, paramters...) of a model which was saved with save_model
-    :param model: should be the same model as the one which was saved in the path
-    :param path: path to the saved checkpoint
-    :param optimizer: should be the same optimizer as the one which was saved in the path
-    """
-    checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    epoch = checkpoint["epoch"]
-    return model, optimizer, epoch
+# def load(model, path, optimizer):
+#     """
+#     Loads the state (weights, paramters...) of a model which was saved with save_model
+#     :param model: should be the same model as the one which was saved in the path
+#     :param path: path to the saved checkpoint
+#     :param optimizer: should be the same optimizer as the one which was saved in the path
+#     """
+#     checkpoint = torch.load(path)
+#     model.load_state_dict(checkpoint["model_state_dict"])
+#     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+#     epoch = checkpoint["epoch"]
+#     return model, optimizer, epoch
 
 
 # ------------------------------------------ Data utilities ----------------------------------------
@@ -333,6 +333,14 @@ def binary_accuracy(preds, y):
     return torch.sum(preds == y) / preds.shape[0]
 
 
+def save_model(model, fname):
+    torch.save(model.state_dict(), fname)
+
+
+def load_model(model, fname):
+    model.load_state_dict(torch.load(fname))
+
+
 def transformer_classification(portion=1.0):
     class Dataset(torch.utils.data.Dataset):
         """
@@ -405,21 +413,16 @@ def transformer_classification(portion=1.0):
                 )
                 logits = outputs.logits
                 pred = torch.argmax(logits, dim=1)
-                ##predictions.append(pred.detach().cpu().numpy())
-                ##references.append(labels.detach().cpu().numpy())
                 epoch_validation_accuracy += accuracy_score(
                     labels.cpu().numpy(), pred.cpu().numpy()
                 )
                 epoch_validation_loss += outputs.loss.item()
 
         epoch_mean_validation_accuracy = epoch_validation_accuracy / len(data_loader)
-        epoch_mean_validation_loss = epoch_mean_loss / len(data_loader)
+        epoch_mean_validation_loss = epoch_validation_loss / len(data_loader)
         return epoch_mean_validation_loss, epoch_mean_validation_accuracy
 
     data_manager = DataManager(data_type=W2V_SEQUENCE, batch_size=64)
-    # x_train, y_train, x_test, y_test = get_data(
-    #     categories=category_dict.keys(), portion=portion
-    # )
     x_train = data_manager.get_sent_words(TRAIN)
     y_train = data_manager.get_labels(TRAIN)
     x_test = data_manager.get_sent_words(TEST)
@@ -433,12 +436,23 @@ def transformer_classification(portion=1.0):
     learning_rate = 1e-5
 
     # Model, tokenizer, and metric
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "distilroberta-base", num_labels=num_labels, cache_dir="./transformer_cache"
-    ).to(dev)
-    tokenizer = AutoTokenizer.from_pretrained(
-        "distilroberta-base", cache_dir="./tokenizer_cache"
-    )
+    try:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "distilroberta-base-transformer-cache", num_labels=num_labels
+        )
+        tokenizer = AutoTokenizer.from_pretrained("distilroberta-base-tokenizer-cache")
+    except:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "distilroberta-base", num_labels=num_labels, cache_dir="./transformer_cache"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            "distilroberta-base", cache_dir="./tokenizer_cache"
+        )
+        model.save_pretrained("distilroberta-base-transformer-cache")
+        model.save_pretrained("distilroberta-base-tokenizer-cache")
+        
+    model = model.to(dev)
+    tokenizer = tokenizer
     metric = evaluate.load("accuracy")
 
     # Datasets and DataLoaders

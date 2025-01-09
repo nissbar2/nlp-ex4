@@ -303,6 +303,14 @@ class DataManager:
         """
         return np.array([sent.sentiment_class for sent in self.sentences[data_subset]])
 
+    def get_sent_words(self, data_subset=TRAIN):
+        """
+        :param data_subset: one of TRAIN VAL and TEST
+        :return: numpy array with the labels of the requested part of the datset in the same order of the
+        examples.
+        """
+        return np.array([sent.text for sent in self.sentences[data_subset]])
+
     def get_input_shape(self):
         """
         :return: the shape of a single example from this dataset (only of x, ignoring y the label).
@@ -537,6 +545,7 @@ def train_log_linear_with_one_hot(device):
     )
     print("Test Log Linear loss ", mean_test_loss)
     print("Test Log Linear accuracy ", mean_test_accuracy.item())
+
     indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
     subset = Subset(data_manager.torch_datasets[TEST], indices)
     dataloader = DataLoader(subset, batch_size=64)
