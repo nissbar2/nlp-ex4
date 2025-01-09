@@ -35,6 +35,24 @@ TEST = "test"
 # ------------------------------------------ Helper methods and classes --------------------------
 
 
+class CustomDataset(torch.utils.data.Dataset):
+    """
+    Dataset for loading data
+    """
+
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
+
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item["labels"] = torch.tensor(self.labels[idx], dtype=torch.long)
+        return item
+
+    def __len__(self):
+        return len(self.labels)
+
+
 def get_available_device():
     """
     Allows training on GPU if available. Can help with running things faster when a GPU with cuda is
@@ -333,106 +351,79 @@ def binary_accuracy(preds, y):
     return torch.sum(preds == y) / preds.shape[0]
 
 
-def save_model(model, fname):
-    torch.save(model.state_dict(), fname)
+def evaluate_model(model, data_loader, dev="cpu", metric=None):
+    model.eval()
 
-
-def load_model(model, fname):
-    model.load_state_dict(torch.load(fname))
-
-
-def transformer_classification(portion=1.0):
-    class Dataset(torch.utils.data.Dataset):
-        """
-        Dataset for loading data
-        """
-
-        def __init__(self, encodings, labels):
-            self.encodings = encodings
-            self.labels = labels
-
-        def __getitem__(self, idx):
-            item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-            item["labels"] = torch.tensor(self.labels[idx], dtype=torch.long)
-            return item
-
-        def __len__(self):
-            return len(self.labels)
-
-    def train_epoch(model, data_loader, optimizer, dev="cpu"):
-        """
-        Perform an epoch of training of the model with the optimizer
-        :param model:
-        :param data_loader:
-        :param optimizer:
-        :param dev:
-        :return: Average loss over the epoch
-        """
-        model.train()
-        total_loss = 0.0
-        accuracy = 0.0
-        # iterate over batches
-        for batch in tqdm(data_loader):
-            input_ids = batch["input_ids"].to(dev)
-            attention_mask = batch["attention_mask"].to(dev)
-            labels = batch["labels"].to(dev)
-            # print(type(input_ids))
-            ########### add your code here ###########
-            model.zero_grad()
+    epoch_validation_accuracy = 0.0
+    epoch_validation_loss = 0.0
+    predictions = []
+    references = []
+    for batch in tqdm(data_loader):
+        input_ids = batch["input_ids"].to(dev)
+        attention_mask = batch["attention_mask"].to(dev)
+        labels = batch["labels"].to(dev)
+        ########### add your code here ###########
+        with torch.no_grad():
             outputs = model(
                 input_ids=input_ids, attention_mask=attention_mask, labels=labels
             )
-            loss = outputs.loss
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
+            logits = outputs.logits
+            pred = torch.argmax(logits, dim=1)
+            epoch_validation_accuracy += accuracy_score(
+                labels.cpu().numpy(), pred.cpu().numpy()
+            )
+            epoch_validation_loss += outputs.loss.item()
 
-            with torch.no_grad():
-                pred = torch.argmax(outputs.logits, dim=1)
-                accuracy += binary_accuracy(pred, batch["labels"])
+    epoch_mean_validation_accuracy = epoch_validation_accuracy / len(data_loader)
+    epoch_mean_validation_loss = epoch_validation_loss / len(data_loader)
+    return epoch_mean_validation_loss, epoch_mean_validation_accuracy
 
-        epoch_mean_loss = total_loss / len(data_loader)
-        epoch_mean_accuracy = accuracy / len(data_loader)
-        return epoch_mean_loss, epoch_mean_loss
 
-    def evaluate_model(model, data_loader, dev="cpu", metric=None):
-        model.eval()
+def train_epoch(model, data_loader, optimizer, dev="cpu"):
+    """
+    Perform an epoch of training of the model with the optimizer
+    :param model:
+    :param data_loader:
+    :param optimizer:
+    :param dev:
+    :return: Average loss over the epoch
+    """
+    model.train()
+    total_loss = 0.0
+    accuracy = 0.0
+    # iterate over batches
+    for batch in tqdm(data_loader):
+        input_ids = batch["input_ids"].to(dev)
+        attention_mask = batch["attention_mask"].to(dev)
+        labels = batch["labels"].to(dev)
+        # print(type(input_ids))
+        ########### add your code here ###########
+        model.zero_grad()
+        outputs = model(
+            input_ids=input_ids, attention_mask=attention_mask, labels=labels
+        )
+        loss = outputs.loss
+        total_loss += loss.item()
+        loss.backward()
+        optimizer.step()
 
-        epoch_validation_accuracy = 0.0
-        epoch_validation_loss = 0.0
-        predictions = []
-        references = []
-        for batch in tqdm(data_loader):
-            input_ids = batch["input_ids"].to(dev)
-            attention_mask = batch["attention_mask"].to(dev)
-            labels = batch["labels"].to(dev)
-            ########### add your code here ###########
-            with torch.no_grad():
-                outputs = model(
-                    input_ids=input_ids, attention_mask=attention_mask, labels=labels
-                )
-                logits = outputs.logits
-                pred = torch.argmax(logits, dim=1)
-                epoch_validation_accuracy += accuracy_score(
-                    labels.cpu().numpy(), pred.cpu().numpy()
-                )
-                epoch_validation_loss += outputs.loss.item()
+        with torch.no_grad():
+            pred = torch.argmax(outputs.logits, dim=1)
+            accuracy += binary_accuracy(pred, batch["labels"])
 
-        epoch_mean_validation_accuracy = epoch_validation_accuracy / len(data_loader)
-        epoch_mean_validation_loss = epoch_validation_loss / len(data_loader)
-        return epoch_mean_validation_loss, epoch_mean_validation_accuracy
+    epoch_mean_loss = total_loss / len(data_loader)
+    epoch_mean_accuracy = accuracy / len(data_loader)
+    return epoch_mean_loss, epoch_mean_loss
 
-    data_manager = DataManager(data_type=W2V_SEQUENCE, batch_size=64)
+
+def transformer_classification(data_manager, epochs, batch_size, device):
     x_train = data_manager.get_sent_words(TRAIN)
     y_train = data_manager.get_labels(TRAIN)
-    x_test = data_manager.get_sent_words(TEST)
-    y_test = data_manager.get_labels(TEST)
+    x_test = data_manager.get_sent_words(VAL)
+    y_test = data_manager.get_labels(VAL)
 
     # Parameters
-    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_labels = 2
-    epochs = 2
-    batch_size = 64
     learning_rate = 1e-5
 
     # Model, tokenizer, and metric
@@ -450,43 +441,87 @@ def transformer_classification(portion=1.0):
         )
         model.save_pretrained("distilroberta-base-transformer-cache")
         model.save_pretrained("distilroberta-base-tokenizer-cache")
-        
-    model = model.to(dev)
-    tokenizer = tokenizer
+
+    model = model.to(device)
+    # tokenizer = tokenizer
     metric = evaluate.load("accuracy")
 
     # Datasets and DataLoaders
-    train_dataset = Dataset(tokenizer(x_train, truncation=True, padding=True), y_train)
-    val_dataset = Dataset(tokenizer(x_test, truncation=True, padding=True), y_test)
+    train_dataset = CustomDataset(
+        tokenizer(x_train, truncation=True, padding=True), y_train
+    )
+    val_dataset = CustomDataset(
+        tokenizer(x_test, truncation=True, padding=True), y_test
+    )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
     ########### add your code here ###########
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.0)
     train_losses = []
     val_losses = []
     train_accuracies = []
     val_accuracies = []
+
+    print(f"About to fine-tune a pre-trained transformer for {epochs} epochs")
     for epoch in range(epochs):
-        train_loss, train_acc = train_epoch(model, train_loader, optimizer, dev)
+        print(f"Epoch {epoch} started")
+        train_loss, train_acc = train_epoch(model, train_loader, optimizer, device)
+        # train_loss, train_acc = train_epoch(model, val_loader, optimizer, device)  # for faster debugging.
         train_losses.append(train_loss)
         train_accuracies.append(train_acc)
-        val_loss, val_acc = evaluate_model(model, val_loader, dev, metric)
+        val_loss, val_acc = evaluate_model(model, val_loader, device, metric)
         val_losses.append(val_loss)
         val_accuracies.append(val_acc)
+        print(f"Epoch {epoch} done!")
 
-    return train_loss, train_accuracies, val_losses, val_accuracies, model
+    print("Fine-tuning is done!")
+
+    return train_losses, train_accuracies, val_losses, val_accuracies, model
 
 
-if __name__ == "__main__":
+def get_predictions_for_data(model, data_iter, device):
+    """
+    This function should iterate over all batches of examples from data_iter and return all of the model's
+    predictions as a numpy ndarray or torch tensor (or list if you prefer). the prediction should be in the
+    same order of the examples returned by data_iter.
+    :param model: one of the models you implemented in the exercise
+    :param data_iter: torch iterator as given by the DataManager
+    :return:
+    """
+    model.eval()
+    preds = []
+    all_y = []
+    with torch.no_grad():
+        for batch in tqdm(data_iter):
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            outputs = model(
+                input_ids=input_ids, attention_mask=attention_mask, labels=labels
+            )
+            batch_pred = torch.argmax(outputs.logits, dim=1)
+            preds.append(batch_pred)
+            all_y.append(labels)
+
+    pred = torch.cat(preds, dim=0)
+    y = torch.cat(all_y, dim=0)
+    return pred, y
+
+
+def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     EPOCHS = 2
+    BATCH_SIZE = 64
+    data_manager = DataManager(data_type=W2V_SEQUENCE, batch_size=BATCH_SIZE)
+
     (
         train_loss,
         train_accuracy,
         val_loss,
         val_accuracy,
         model,
-    ) = transformer_classification()
+    ) = transformer_classification(data_manager, EPOCHS, BATCH_SIZE, device)
 
     x = [str(a + 1) for a in range(EPOCHS)]
     plt.plot(x, train_loss, label="train loss", c="blue")
@@ -495,6 +530,7 @@ if __name__ == "__main__":
     plt.title("Loss as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Loss")
+    plt.grid(True)
     plt.show()
 
     plt.plot(x, train_accuracy, label="train accuracy", c="blue")
@@ -503,26 +539,44 @@ if __name__ == "__main__":
     plt.title("Accuracy as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Accuracy")
+    plt.grid(True)
     plt.show()
 
-    criterion = nn.BCEWithLogitsLoss()
+    tokenizer = AutoTokenizer.from_pretrained(
+        "distilroberta-base", cache_dir="./tokenizer_cache"
+    )
+    x_test = data_manager.get_sent_words(TEST)
+    y_test = data_manager.get_labels(TEST)
+    test_dataset = CustomDataset(
+        tokenizer(x_test, truncation=True, padding=True), y_test
+    )
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+
+    print("Evaluating the fine-tuned transformer on the test-set")
+    metric = evaluate.load("accuracy")
     mean_test_loss, mean_test_accuracy = evaluate_model(
-        model, data_manager.torch_iterators[TEST], criterion
+        model, test_loader, device, metric
     )
     print("Test loss ", mean_test_loss)
-    print("Test accuracy ", mean_test_accuracy.item())
+    print("Test accuracy ", mean_test_accuracy)
+
+    print("Evaluating the fine-tuned transformer on the special substs of the test-set")
     indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
+    subset = Subset(test_dataset, indices)
+    dataloader = DataLoader(subset, batch_size=BATCH_SIZE)
+    predictions, y = get_predictions_for_data(model, dataloader, device)
     success_rate = binary_accuracy(predictions, y)
     print("Test Negated Polarity Accuracy ", success_rate.item())
 
     indices = data_loader.get_rare_words_examples(
         data_manager.sentences[TEST], data_manager.sentiment_dataset
     )
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
+    subset = Subset(test_dataset, indices)
+    dataloader = DataLoader(subset, batch_size=BATCH_SIZE)
+    predictions, y = get_predictions_for_data(model, dataloader, device)
     success_rate = binary_accuracy(predictions, y)
     print("Test Rare Words Accuracy ", success_rate.item())
+
+
+if __name__ == "__main__":
+    main()
