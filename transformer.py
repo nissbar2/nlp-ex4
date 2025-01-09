@@ -425,6 +425,7 @@ def transformer_classification(data_manager, epochs, batch_size, device):
     # Parameters
     num_labels = 2
     learning_rate = 1e-5
+    weight_decay = 0.0
 
     # Model, tokenizer, and metric
     try:
@@ -457,7 +458,9 @@ def transformer_classification(data_manager, epochs, batch_size, device):
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
     ########### add your code here ###########
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.0)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+    )
     train_losses = []
     val_losses = []
     train_accuracies = []
