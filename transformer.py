@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import tqdm
 from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 from tqdm import tqdm
@@ -512,7 +511,7 @@ def get_predictions_for_data(model, data_iter, device):
     return pred, y
 
 
-def main():
+def main(show: bool = True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     EPOCHS = 2
     BATCH_SIZE = 64
@@ -534,7 +533,10 @@ def main():
     plt.xlabel("#epochs")
     plt.ylabel("Mean Loss")
     plt.grid(True)
-    plt.show()
+    plt.savefig("transformer_train_validation_loss.png")
+    if show:
+        plt.show()
+    plt.close()
 
     plt.plot(x, train_accuracy, label="train accuracy", c="blue")
     plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
@@ -543,7 +545,10 @@ def main():
     plt.xlabel("#epochs")
     plt.ylabel("Mean Accuracy")
     plt.grid(True)
-    plt.show()
+    plt.savefig("transformer_train_validation_accuracy.png")
+    if show:
+        plt.show()
+    plt.close()
 
     tokenizer = AutoTokenizer.from_pretrained(
         "distilroberta-base", cache_dir="./tokenizer_cache"
@@ -582,4 +587,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(show=False)

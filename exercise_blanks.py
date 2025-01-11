@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import tqdm
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
+from tqdm import tqdm
 
 import data_loader
 
@@ -303,14 +303,6 @@ class DataManager:
         """
         return np.array([sent.sentiment_class for sent in self.sentences[data_subset]])
 
-    def get_sent_words(self, data_subset=TRAIN):
-        """
-        :param data_subset: one of TRAIN VAL and TEST
-        :return: numpy array with the labels of the requested part of the datset in the same order of the
-        examples.
-        """
-        return np.array([sent.text for sent in self.sentences[data_subset]])
-
     def get_input_shape(self):
         """
         :return: the shape of a single example from this dataset (only of x, ignoring y the label).
@@ -412,7 +404,7 @@ def train_epoch(model, data_iterator, optimizer, criterion):
     model.train()
     epoch_loss = 0.0
     accuracy = 0.0
-    for X, y in data_iterator:
+    for X, y in tqdm(data_iterator):
         X = X.to(model.device)
         y = y.to(model.device)
         optimizer.zero_grad()
@@ -443,7 +435,7 @@ def evaluate(model, data_iterator, criterion):
     epoch_loss = 0.0
     accuracy = 0.0
     with torch.no_grad():
-        for X, y in data_iterator:
+        for X, y in tqdm(data_iterator):
             X = X.to(model.device)
             y = y.to(model.device)
             logits = model(X)
@@ -481,7 +473,7 @@ def get_predictions_for_data(model, data_iter):
     return pred, y
 
 
-def train_model(model, data_manager, n_epochs, lr, weight_decay=0.0):
+def train_model(model, name, data_manager, n_epochs, lr, weight_decay=0.0):
     """
     Runs the full training procedure for the given model. The optimization should be done using the Adam
     optimizer with all parameters but learning rate and weight decay set to default.
@@ -497,18 +489,27 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.0):
     train_accuracy = np.zeros(n_epochs)
     val_loss = np.zeros(n_epochs)
     val_accuracy = np.zeros(n_epochs)
+
+    print(f"About to train the model: {name} for {n_epochs} epochs")
+
     for epoch in range(n_epochs):
+        print(f"Epoch {epoch} started")
         train_loss[epoch], train_accuracy[epoch] = train_epoch(
-            model, data_manager.torch_iterators[TRAIN], optimizer, criterion
+            model,
+            data_manager.torch_iterators[TRAIN],
+            optimizer,
+            criterion,
         )
         val_loss[epoch], val_accuracy[epoch] = evaluate(
             model, data_manager.torch_iterators[VAL], criterion
         )
+        print(f"Epoch {epoch} done!")
 
+    print(f"Training of the model {name} is done!")
     return train_loss, train_accuracy, val_loss, val_accuracy
 
 
-def train_log_linear_with_one_hot(device):
+def train_log_linear_with_one_hot(device, show: bool = True):
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
@@ -519,7 +520,12 @@ def train_log_linear_with_one_hot(device):
     print("Log Linear Model (using one-hot encoding):")
 
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
-        model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001
+        model,
+        "log-linear with one-hot encoding",
+        data_manager,
+        n_epochs=EPOCHS,
+        lr=0.01,
+        weight_decay=0.001,
     )
 
     x = [str(a + 1) for a in range(EPOCHS)]
@@ -529,7 +535,10 @@ def train_log_linear_with_one_hot(device):
     plt.title("Loss as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Loss")
-    plt.show()
+    plt.savefig("train_log_linear_with_onehot_loss.png")
+    if show:
+        plt.show()
+    plt.close()
 
     plt.plot(x, train_accuracy, label="train accuracy", c="blue")
     plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
@@ -537,7 +546,10 @@ def train_log_linear_with_one_hot(device):
     plt.title("Accuracy as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Accuracy")
-    plt.show()
+    plt.savefig("train_log_linear_with_onehot_accuracy.png")
+    if show:
+        plt.show()
+    plt.close()
 
     criterion = nn.BCEWithLogitsLoss()
     mean_test_loss, mean_test_accuracy = evaluate(
@@ -563,7 +575,7 @@ def train_log_linear_with_one_hot(device):
     print("Test Log Linear Rare Words Accuracy ", success_rate.item())
 
 
-def train_log_linear_with_w2v(device):
+def train_log_linear_with_w2v(device, show: bool = True):
     """
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.
@@ -577,7 +589,12 @@ def train_log_linear_with_w2v(device):
     print("Log Linear Model (using averaged word2vec embedding):")
 
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
-        model, data_manager, n_epochs=EPOCHS, lr=0.01, weight_decay=0.001
+        model,
+        "log-linear with word2vec embedding",
+        data_manager,
+        n_epochs=EPOCHS,
+        lr=0.01,
+        weight_decay=0.001,
     )
 
     x = [str(a + 1) for a in range(EPOCHS)]
@@ -587,7 +604,10 @@ def train_log_linear_with_w2v(device):
     plt.title("Loss as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Loss")
-    plt.show()
+    plt.savefig("train_log_linear_with_w2v_loss.png")
+    if show:
+        plt.show()
+    plt.close()
 
     plt.plot(x, train_accuracy, label="train accuracy", c="blue")
     plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
@@ -595,7 +615,10 @@ def train_log_linear_with_w2v(device):
     plt.title("Accuracy as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Accuracy")
-    plt.show()
+    plt.savefig("train_log_linear_with_w2v_accuracy.png")
+    if show:
+        plt.show()
+    plt.close()
 
     criterion = nn.BCEWithLogitsLoss()
     mean_test_loss, mean_test_accuracy = evaluate(
@@ -620,7 +643,7 @@ def train_log_linear_with_w2v(device):
     print("Test Rare Words Accuracy ", success_rate.item())
 
 
-def train_lstm_with_w2v(device):
+def train_lstm_with_w2v(device, show: bool = True):
     """
     Here comes your code for training and evaluation of the LSTM model.
     """
@@ -633,7 +656,7 @@ def train_lstm_with_w2v(device):
     print("LSTM Model (using sequence of 52 word2vec embedding):")
 
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
-        model, data_manager, n_epochs=EPOCHS, lr=0.001, weight_decay=0.0001
+        model, "LSTM", data_manager, n_epochs=EPOCHS, lr=0.001, weight_decay=0.0001
     )
 
     x = [str(a + 1) for a in range(EPOCHS)]
@@ -643,7 +666,10 @@ def train_lstm_with_w2v(device):
     plt.title("Loss as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Loss")
-    plt.show()
+    plt.savefig("train_lstm_loss.png")
+    if show:
+        plt.show()
+    plt.close()
 
     plt.plot(x, train_accuracy, label="train accuracy", c="blue")
     plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
@@ -651,7 +677,10 @@ def train_lstm_with_w2v(device):
     plt.title("Accuracy as function of epochs")
     plt.xlabel("#epochs")
     plt.ylabel("Mean Accuracy")
-    plt.show()
+    plt.savefig("train_lstm_accuracy.png")
+    if show:
+        plt.show()
+    plt.close()
 
     criterion = nn.BCEWithLogitsLoss()
     mean_test_loss, mean_test_accuracy = evaluate(
@@ -678,6 +707,6 @@ def train_lstm_with_w2v(device):
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_log_linear_with_one_hot(device)
-    train_log_linear_with_w2v(device)
-    train_lstm_with_w2v(device)
+    train_log_linear_with_one_hot(device, show=False)
+    train_log_linear_with_w2v(device, show=False)
+    train_lstm_with_w2v(device, show=False)
