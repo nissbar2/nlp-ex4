@@ -117,6 +117,27 @@ def create_or_load_slim_w2v(words_list, cache_w2v=True):
     return w2v_emb_dict
 
 
+# def get_w2v_average(sent, word_to_vec, embedding_dim=W2V_EMBEDDING_DIM):
+#     """
+#     This method gets a sentence and returns the average word embedding of the words consisting
+#     the sentence.
+#     :param sent: the sentence object
+#     :param word_to_vec: a dictionary mapping words to their vector embeddings
+#     :param embedding_dim: the dimension of the word embedding vectors
+#     :return The average embedding vector as numpy ndarray.
+#     """
+#     text = sent.text
+#     vectors = []
+#     for word in text:
+#         if word in word_to_vec:
+#             vectors.append(word_to_vec[word])
+#     if len(vectors) == 0:
+#         # raise ValueError(f"shit: {text}")
+#         return np.zeros(embedding_dim, dtype=np.float32)
+#     result = np.mean(vectors, axis=0).astype(np.float32)
+#     return result
+
+
 def get_w2v_average(sent, word_to_vec, embedding_dim=W2V_EMBEDDING_DIM):
     """
     This method gets a sentence and returns the average word embedding of the words consisting
@@ -131,9 +152,8 @@ def get_w2v_average(sent, word_to_vec, embedding_dim=W2V_EMBEDDING_DIM):
     for word in text:
         if word in word_to_vec:
             vectors.append(word_to_vec[word])
-    if len(vectors) == 0:
-        # raise ValueError(f"shit: {text}")
-        return np.zeros(embedding_dim, dtype=np.float32)
+        else:
+            vectors.append(np.zeros(embedding_dim, dtype=np.float32))
     result = np.mean(vectors, axis=0).astype(np.float32)
     return result
 
@@ -389,7 +409,7 @@ def binary_accuracy(preds, y):
     :param y: a vector of true labels
     :return: scalar value - (<number of accurate predictions> / <number of examples>)
     """
-    return torch.sum(preds == y) / preds.shape[0]
+    return torch.sum(preds.squeeze(dim=1) == y) / y.shape[0]
 
 
 def train_epoch(model, data_iterator, optimizer, criterion):
@@ -493,7 +513,7 @@ def train_model(model, name, data_manager, n_epochs, lr, weight_decay=0.0):
     print(f"About to train the model: {name} for {n_epochs} epochs")
 
     for epoch in range(n_epochs):
-        print(f"Epoch {epoch} started")
+        print(f"Epoch {epoch + 1} started")
         train_loss[epoch], train_accuracy[epoch] = train_epoch(
             model,
             data_manager.torch_iterators[TRAIN],
@@ -503,10 +523,69 @@ def train_model(model, name, data_manager, n_epochs, lr, weight_decay=0.0):
         val_loss[epoch], val_accuracy[epoch] = evaluate(
             model, data_manager.torch_iterators[VAL], criterion
         )
-        print(f"Epoch {epoch} done!")
+        print(f"Epoch {epoch + 1} done!")
 
     print(f"Training of the model {name} is done!")
     return train_loss, train_accuracy, val_loss, val_accuracy
+
+
+def plot_results(
+    name, epochs, train_loss, val_loss, train_accuracy, val_accuracy, show: bool = True
+):
+    x = [str(a + 1) for a in range(epochs)]
+    plt.plot(x, train_loss, label="train loss", c="blue")
+    plt.plot(x, val_loss, label="validation loss", c="orange")
+    plt.legend()
+    plt.title(f"{name} loss as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Loss")
+    plt.grid(True)
+    plt.savefig(f"train_{name}_loss.png")
+    if show:
+        plt.show()
+    plt.close()
+
+    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
+    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
+    plt.legend()
+    plt.title(f"{name} accuracy as function of epochs")
+    plt.xlabel("#epochs")
+    plt.ylabel("Mean Accuracy")
+    plt.grid(True)
+    plt.savefig(f"train_{name}_accuracy.png")
+    if show:
+        plt.show()
+    plt.close()
+
+
+def test_evaluation(model, name, data_manager, batch_size):
+    criterion = nn.BCEWithLogitsLoss()
+    mean_test_loss, mean_test_accuracy = evaluate(
+        model, data_manager.torch_iterators[TEST], criterion
+    )
+    mean_validation_loss, mean_validation_accuracy = evaluate(
+        model, data_manager.torch_iterators[VAL], criterion
+    )
+    print(f"{name} test loss ", mean_test_loss)
+    print(f"{name} test accuracy ", mean_test_accuracy.item())
+    print(f"{name} validation loss ", mean_validation_loss)
+    print(f"{name} validation accuracy ", mean_validation_accuracy.item())
+
+    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=batch_size)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print(f"Test {name} on Negated Polarity Accuracy ", success_rate.item())
+
+    indices = data_loader.get_rare_words_examples(
+        data_manager.sentences[TEST], data_manager.sentiment_dataset
+    )
+    subset = Subset(data_manager.torch_datasets[TEST], indices)
+    dataloader = DataLoader(subset, batch_size=batch_size)
+    predictions, y = get_predictions_for_data(model, dataloader)
+    success_rate = binary_accuracy(predictions, y)
+    print(f"Test {name} on Rare Words Accuracy ", success_rate.item())
 
 
 def train_log_linear_with_one_hot(device, show: bool = True):
@@ -514,7 +593,11 @@ def train_log_linear_with_one_hot(device, show: bool = True):
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
     EPOCHS = 20
-    data_manager = DataManager(batch_size=64)
+    BATCH_SIZE = 64
+    LEARNING_RATE = 0.01
+    WEIGHT_DECAY = 0.001
+
+    data_manager = DataManager(batch_size=BATCH_SIZE)
     model = LogLinear(data_manager.get_input_shape()[0]).to(device)
 
     print("Log Linear Model (using one-hot encoding):")
@@ -524,55 +607,21 @@ def train_log_linear_with_one_hot(device, show: bool = True):
         "log-linear with one-hot encoding",
         data_manager,
         n_epochs=EPOCHS,
-        lr=0.01,
-        weight_decay=0.001,
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
     )
 
-    x = [str(a + 1) for a in range(EPOCHS)]
-    plt.plot(x, train_loss, label="train loss", c="blue")
-    plt.plot(x, val_loss, label="validation loss", c="orange")
-    plt.legend()
-    plt.title("Loss as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Loss")
-    plt.savefig("train_log_linear_with_onehot_loss.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
-    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
-    plt.legend()
-    plt.title("Accuracy as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Accuracy")
-    plt.savefig("train_log_linear_with_onehot_accuracy.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    criterion = nn.BCEWithLogitsLoss()
-    mean_test_loss, mean_test_accuracy = evaluate(
-        model, data_manager.torch_iterators[TEST], criterion
+    plot_results(
+        "log_linear_with_onehot",
+        EPOCHS,
+        train_loss,
+        val_loss,
+        train_accuracy,
+        val_accuracy,
+        show,
     )
-    print("Test Log Linear loss ", mean_test_loss)
-    print("Test Log Linear accuracy ", mean_test_accuracy.item())
 
-    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Log Linear Negated Polarity Accuracy ", success_rate.item())
-
-    indices = data_loader.get_rare_words_examples(
-        data_manager.sentences[TEST], data_manager.sentiment_dataset
-    )
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Log Linear Rare Words Accuracy ", success_rate.item())
+    test_evaluation(model, "Simple Log-Linear", data_manager, BATCH_SIZE)
 
 
 def train_log_linear_with_w2v(device, show: bool = True):
@@ -581,8 +630,12 @@ def train_log_linear_with_w2v(device, show: bool = True):
     representation.
     """
     EPOCHS = 20
+    BATCH_SIZE = 64
+    LEARNING_RATE = 0.01
+    WEIGHT_DECAY = 0.001
+
     data_manager = DataManager(
-        data_type=W2V_AVERAGE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM
+        data_type=W2V_AVERAGE, batch_size=BATCH_SIZE, embedding_dim=W2V_EMBEDDING_DIM
     )
     model = LogLinear(data_manager.get_input_shape()[0]).to(device)
 
@@ -593,54 +646,21 @@ def train_log_linear_with_w2v(device, show: bool = True):
         "log-linear with word2vec embedding",
         data_manager,
         n_epochs=EPOCHS,
-        lr=0.01,
-        weight_decay=0.001,
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
     )
 
-    x = [str(a + 1) for a in range(EPOCHS)]
-    plt.plot(x, train_loss, label="train loss", c="blue")
-    plt.plot(x, val_loss, label="validation loss", c="orange")
-    plt.legend()
-    plt.title("Loss as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Loss")
-    plt.savefig("train_log_linear_with_w2v_loss.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
-    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
-    plt.legend()
-    plt.title("Accuracy as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Accuracy")
-    plt.savefig("train_log_linear_with_w2v_accuracy.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    criterion = nn.BCEWithLogitsLoss()
-    mean_test_loss, mean_test_accuracy = evaluate(
-        model, data_manager.torch_iterators[TEST], criterion
+    plot_results(
+        "log_linear_with_w2v",
+        EPOCHS,
+        train_loss,
+        val_loss,
+        train_accuracy,
+        val_accuracy,
+        show,
     )
-    print("Test loss ", mean_test_loss)
-    print("Test accuracy ", mean_test_accuracy.item())
-    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Negated Polarity Accuracy ", success_rate.item())
 
-    indices = data_loader.get_rare_words_examples(
-        data_manager.sentences[TEST], data_manager.sentiment_dataset
-    )
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Rare Words Accuracy ", success_rate.item())
+    test_evaluation(model, "Log-Linear (with word2vec)", data_manager, BATCH_SIZE)
 
 
 def train_lstm_with_w2v(device, show: bool = True):
@@ -648,61 +668,33 @@ def train_lstm_with_w2v(device, show: bool = True):
     Here comes your code for training and evaluation of the LSTM model.
     """
     EPOCHS = 4
+    BATCH_SIZE = 64
+    N_LAYERS = 1
+    DROPOUT = 0.5
+    LEARNING_RATE = 0.001
+    WEIGHT_DECAY = 0.0001
+
     data_manager = DataManager(
-        data_type=W2V_SEQUENCE, batch_size=64, embedding_dim=W2V_EMBEDDING_DIM
+        data_type=W2V_SEQUENCE, batch_size=BATCH_SIZE, embedding_dim=W2V_EMBEDDING_DIM
     )
-    model = LSTM(W2V_EMBEDDING_DIM, HIDDEN_DIM, 1, 0.5).to(device)
+    model = LSTM(W2V_EMBEDDING_DIM, HIDDEN_DIM, N_LAYERS, DROPOUT).to(device)
 
     print("LSTM Model (using sequence of 52 word2vec embedding):")
 
     train_loss, train_accuracy, val_loss, val_accuracy = train_model(
-        model, "LSTM", data_manager, n_epochs=EPOCHS, lr=0.001, weight_decay=0.0001
+        model,
+        "LSTM",
+        data_manager,
+        n_epochs=EPOCHS,
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
     )
 
-    x = [str(a + 1) for a in range(EPOCHS)]
-    plt.plot(x, train_loss, label="train loss", c="blue")
-    plt.plot(x, val_loss, label="validation loss", c="orange")
-    plt.legend()
-    plt.title("Loss as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Loss")
-    plt.savefig("train_lstm_loss.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    plt.plot(x, train_accuracy, label="train accuracy", c="blue")
-    plt.plot(x, val_accuracy, label="validation accuracy", c="orange")
-    plt.legend()
-    plt.title("Accuracy as function of epochs")
-    plt.xlabel("#epochs")
-    plt.ylabel("Mean Accuracy")
-    plt.savefig("train_lstm_accuracy.png")
-    if show:
-        plt.show()
-    plt.close()
-
-    criterion = nn.BCEWithLogitsLoss()
-    mean_test_loss, mean_test_accuracy = evaluate(
-        model, data_manager.torch_iterators[TEST], criterion
+    plot_results(
+        "LSTM", EPOCHS, train_loss, val_loss, train_accuracy, val_accuracy, show
     )
-    print("Test loss ", mean_test_loss)
-    print("Test accuracy ", mean_test_accuracy.item())
-    indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Negated Polarity Accuracy ", success_rate.item())
 
-    indices = data_loader.get_rare_words_examples(
-        data_manager.sentences[TEST], data_manager.sentiment_dataset
-    )
-    subset = Subset(data_manager.torch_datasets[TEST], indices)
-    dataloader = DataLoader(subset, batch_size=64)
-    predictions, y = get_predictions_for_data(model, dataloader)
-    success_rate = binary_accuracy(predictions, y)
-    print("Test Rare Words Accuracy ", success_rate.item())
+    test_evaluation(model, "LSTM", data_manager, BATCH_SIZE)
 
 
 if __name__ == "__main__":

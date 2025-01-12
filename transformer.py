@@ -422,19 +422,19 @@ def transformer_classification(data_manager, epochs, batch_size, device):
     y_test = data_manager.get_labels(VAL)
 
     # Parameters
-    num_labels = 2
-    learning_rate = 1e-5
-    weight_decay = 0.0
+    NUM_LABELS = 2
+    LEARNING_RATE = 1e-5
+    WEIGHT_DECAY = 0.0
 
     # Model, tokenizer, and metric
     try:
         model = AutoModelForSequenceClassification.from_pretrained(
-            "distilroberta-base-transformer-cache", num_labels=num_labels
+            "distilroberta-base-transformer-cache", num_labels=NUM_LABELS
         )
         tokenizer = AutoTokenizer.from_pretrained("distilroberta-base-tokenizer-cache")
     except:
         model = AutoModelForSequenceClassification.from_pretrained(
-            "distilroberta-base", num_labels=num_labels, cache_dir="./transformer_cache"
+            "distilroberta-base", num_labels=NUM_LABELS, cache_dir="./transformer_cache"
         )
         tokenizer = AutoTokenizer.from_pretrained(
             "distilroberta-base", cache_dir="./tokenizer_cache"
@@ -443,7 +443,6 @@ def transformer_classification(data_manager, epochs, batch_size, device):
         model.save_pretrained("distilroberta-base-tokenizer-cache")
 
     model = model.to(device)
-    # tokenizer = tokenizer
     metric = evaluate.load("accuracy")
 
     # Datasets and DataLoaders
@@ -458,7 +457,7 @@ def transformer_classification(data_manager, epochs, batch_size, device):
 
     ########### add your code here ###########
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
     train_losses = []
     val_losses = []
@@ -559,6 +558,12 @@ def main(show: bool = True):
         tokenizer(x_test, truncation=True, padding=True), y_test
     )
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+    x_validation = data_manager.get_sent_words(TEST)
+    y_validation = data_manager.get_labels(TEST)
+    validation_dataset = CustomDataset(
+        tokenizer(x_validation, truncation=True, padding=True), y_validation
+    )
+    validation_loader = DataLoader(validation_dataset, batch_size=BATCH_SIZE)
 
     print("Evaluating the fine-tuned transformer on the test-set")
     metric = evaluate.load("accuracy")
@@ -567,6 +572,11 @@ def main(show: bool = True):
     )
     print("Test loss ", mean_test_loss)
     print("Test accuracy ", mean_test_accuracy)
+    mean_validation_loss, mean_validation_accuracy = evaluate_model(
+        model, validation_loader, device, metric
+    )
+    print("Validation loss ", mean_validation_loss)
+    print("Validation accuracy ", mean_validation_accuracy)
 
     print("Evaluating the fine-tuned transformer on the special substs of the test-set")
     indices = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
